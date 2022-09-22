@@ -20,12 +20,12 @@ BasicIPC usr_1;
 BasicIPC usr_2;
 BasicIPC usr_3;
 
-void handle_async_msg(int src_port, string msg)
+void handle_async_msg(int src_port, const string& msg)
 {
     cout << "handle_async_msg: " << msg << endl;
 }
 
-string handle_sync_msg_1(int src_port, string msg)
+string handle_sync_msg_1(int src_port, const string& msg)
 {
     cout << "handle_sync_msg: " << msg << endl;
 
@@ -36,7 +36,7 @@ string handle_sync_msg_1(int src_port, string msg)
     return msg + " 1";
 }
 
-string handle_sync_msg_2(int src_port, string msg)
+string handle_sync_msg_2(int src_port, const string& msg)
 {
     cout << "handle_sync_msg: " << msg << endl;
 
@@ -47,7 +47,7 @@ string handle_sync_msg_2(int src_port, string msg)
     return msg + " 2";
 }
 
-string handle_sync_msg_3(int src_port, string msg)
+string handle_sync_msg_3(int src_port, const string& msg)
 {
     cout << "handle_sync_msg: " << msg << endl;
 

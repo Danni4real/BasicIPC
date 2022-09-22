@@ -26,13 +26,13 @@ private:
 
     unsigned int   new_ack();
     void           del_ack(int ack_id);
-    void           set_ack(int ack_id, std::string  ack_msg);
+    void           set_ack(int ack_id, const std::string& ack_msg);
     bool           get_ack(int ack_id, std::string* ack_msg);
 
-    bool  send(int dest_port, std::string msg);
+    bool  send(int dest_port, const std::string& msg);
 
-    std::string (*sync_msg_handler)(int src_port, std::string msg);
-    void       (*async_msg_handler)(int src_port, std::string msg);
+    std::string (*sync_msg_handler)(int src_port, const std::string& msg);
+    void       (*async_msg_handler)(int src_port, const std::string& msg);
 
     static void* msg_receiver(void* basic_ipc);
     static void* msg_processor(void* basic_ipc);
@@ -41,16 +41,16 @@ public:
     BasicIPC();
 
     // async_msg_handler and sync_msg_handler will not be called at same time
-    void set_call_back(void(*async_msg_handler)(int, std::string), std::string(*sync_msg_handler)(int, std::string));
+    void set_call_back(void(*async_msg_handler)(int, const std::string&), std::string(*sync_msg_handler)(int, const std::string&));
 
     // set_my_port() should be called after set_call_back(), if set_call_back() was called
     bool set_my_port(int my_port);
 
     // async_send is thread safe
-    bool async_send(int dest_port, std::string msg);
+    bool async_send(int dest_port, const std::string& msg);
 
     // sync_send is thread safe
-    bool  sync_send(int dest_port, std::string msg, std::string* ack_msg, int time_out_millisec = 1000); // wait ack
+    bool  sync_send(int dest_port, const std::string& msg, std::string* ack_msg, int time_out_millisec = 1000); // wait ack
 };
 
 #endif // BASICIPC_H

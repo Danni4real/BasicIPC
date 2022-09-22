@@ -16,31 +16,31 @@
 
 using namespace std;
 
-int to_int(string arg)
+int to_int(const string& arg)
 {
     return atoi(arg.c_str());
 }
 
-string add_head(int head, string msg)
+string add_head(int head, const string& msg)
 {
     string _head = to_string(head);
 
     return _head + ',' + msg;
 }
 
-string add_head(const char* head, string msg)
+string add_head(const char* head, const string& msg)
 {
     string _head = head;
 
     return _head + ',' + msg;
 }
 
-string add_head(string head, string msg)
+string add_head(const string& head, const string& msg)
 {
     return head + ',' + msg;
 }
 
-string remove_head(string msg)
+string remove_head(const string& msg)
 {
     return msg.substr(msg.find(',')+1);
 }
@@ -125,7 +125,7 @@ void BasicIPC::del_ack(int ack_id)
     ack_lock.unlock();
 }
 
-void BasicIPC::set_ack(int ack_id, string ack_msg)
+void BasicIPC::set_ack(int ack_id, const string& ack_msg)
 {
     ack_lock.lock();
 
@@ -264,7 +264,7 @@ void* BasicIPC::msg_receiver(void* basic_ipc)
     }
 }
 
-bool BasicIPC::send(int dest_port, string msg)
+bool BasicIPC::send(int dest_port, const string& msg)
 {
     bool   ret;
     Socket sock;
@@ -281,7 +281,7 @@ bool BasicIPC::send(int dest_port, string msg)
     return ret;
 }
 
-bool BasicIPC::sync_send(int dest_port, string msg, string* ack_msg, int time_out_millisec)
+bool BasicIPC::sync_send(int dest_port, const string& msg, string* ack_msg, int time_out_millisec)
 {
     bool          ret;
     unsigned int  ack_id;
@@ -312,7 +312,7 @@ end:
     return ret;
 }
 
-bool BasicIPC::async_send(int dest_port, string msg)
+bool BasicIPC::async_send(int dest_port, const string& msg)
 {
     bool ret;
 
@@ -322,7 +322,7 @@ bool BasicIPC::async_send(int dest_port, string msg)
     return ret;
 }
 
-void BasicIPC::set_call_back(void(*async_msg_handler)(int, string), string(*sync_msg_handler)(int, string))
+void BasicIPC::set_call_back(void(*async_msg_handler)(int, const string&), string(*sync_msg_handler)(int, const string&))
 {
      this->sync_msg_handler =  sync_msg_handler;
     this->async_msg_handler = async_msg_handler;

@@ -9,11 +9,11 @@
 
 #include "socket.h"
 
-bool Socket::open_send_sock(std::string dest_sock_file_path)
+bool Socket::open_send_sock(const std::string& dest_sock_file_path)
 {
     return open_send_sock(dest_sock_file_path.c_str());
 }
-bool Socket::open_recv_sock(std::string my_sock_file_path)
+bool Socket::open_recv_sock(const std::string& my_sock_file_path)
 {
     return open_recv_sock(my_sock_file_path.c_str());
 }
@@ -61,7 +61,7 @@ bool Socket::open_recv_sock(const char* my_sock_file_path)
     return true;
 }
 
-int Socket::send(std::string buf)
+int Socket::send(const std::string& buf)
 {
     return send(buf.c_str());
 }

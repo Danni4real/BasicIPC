@@ -18,7 +18,7 @@ public:
     void clear();
 
     std::string pop();
-    void        push(std::string message);
+    void        push(const std::string& message);
 };
 
 #endif // MESSAGE_BUF_H

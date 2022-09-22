@@ -29,7 +29,7 @@ std::string MessageBuf::pop()
     return message;
 }
 
-void MessageBuf::push(std::string message)
+void MessageBuf::push(const std::string& message)
 {
     buf_lock.lock();
 

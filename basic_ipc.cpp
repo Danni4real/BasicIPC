@@ -14,6 +14,8 @@
 
 #define SOCKET_FILE_PREFIX  "/tmp/BasicIPC_USR_"
 
+#define Debug
+
 using namespace std;
 
 int to_int(const string& arg)
@@ -62,10 +64,11 @@ string get_field(string str, int index)
     return field;
 }
 
-BasicIPC::BasicIPC()
+BasicIPC::BasicIPC(int my_port)
 {
+    this->my_port =  my_port;
+
     ack_id  =  0;
-    my_port = -1;
 
     sync_msg_handler = 0;
    async_msg_handler = 0;
@@ -166,12 +169,16 @@ bool BasicIPC::get_ack(int ack_id, std::string* ack_msg)
 }
 
 
-bool BasicIPC::set_my_port(int my_port)
+bool BasicIPC::listen_my_port()
 {
     int       ret;
     pthread_t tid;
 
-    this->my_port = my_port;
+    if(sync_msg_handler == 0 || async_msg_handler == 0)
+    {
+        cout << "BasicIPC: call set_call_back() before call listen_my_port()!" << endl;
+        return false;
+    }
 
     ret = pthread_create(&tid, NULL, msg_receiver, this);
     if(ret != 0)
@@ -209,10 +216,10 @@ void* BasicIPC::msg_processor(void* basic_ipc)
 
         if(msg_head == SYNC_MESSAGE_HEAD)
         {
-            string sync_id = get_field(msg,2);
-
             if(self->sync_msg_handler != 0)
             {
+                string sync_id = get_field(msg,2);
+
                 string ack = self->sync_msg_handler(src_port, remove_head(remove_head(remove_head(msg))));
 
                 self->send(src_port, add_head(ACK_MESSAGE_HEAD, add_head(sync_id, ack)));
@@ -248,10 +255,11 @@ void* BasicIPC::msg_receiver(void* basic_ipc)
         string msg      = sock.get_recv_buf();
         string msg_head = get_field(msg,0);
 
-        cout << "Recv: " << msg << endl;
-
         if(msg_head == ACK_MESSAGE_HEAD)
         {
+#ifdef Debug
+            cout << "Recv ack: " << msg << endl;
+#endif
             int    ack_id  = to_int(get_field(msg,1));
             string ack_msg = remove_head(remove_head(msg));
 
@@ -259,6 +267,9 @@ void* BasicIPC::msg_receiver(void* basic_ipc)
         }
         else
         {
+#ifdef Debug
+            cout << "Recv from Port " << get_field(msg,1) << ": " << msg << endl;
+#endif
             msg_q->push(msg);
         }
     }
@@ -268,7 +279,9 @@ bool BasicIPC::send(int dest_port, const string& msg)
 {
     bool   ret;
     Socket sock;
-
+#ifdef Debug
+    cout << "Send to Port "<< dest_port << ": " << msg << endl;
+#endif
     ret = sock.open_send_sock(string(SOCKET_FILE_PREFIX) + to_string(dest_port));
     if(ret)
     {
@@ -289,8 +302,6 @@ bool BasicIPC::sync_send(int dest_port, const string& msg, string* ack_msg, int 
     ack_id = new_ack();
 
     string message = add_head(SYNC_MESSAGE_HEAD, add_head(my_port, add_head(ack_id, msg)));
-
-    cout << "Send: " << message << endl;
 
     ret = send(dest_port, message);
     if(ret)
@@ -317,13 +328,23 @@ bool BasicIPC::async_send(int dest_port, const string& msg)
     bool ret;
 
     string message = add_head(ASYNC_MESSAGE_HEAD, add_head(my_port, msg));
+
     ret = send(dest_port, message);
 
     return ret;
 }
 
-void BasicIPC::set_call_back(void(*async_msg_handler)(int, const string&), string(*sync_msg_handler)(int, const string&))
+bool BasicIPC::set_call_back( void(*async_msg_handler)(int, const string&),
+                             string(*sync_msg_handler)(int, const string&))
 {
+    if(async_msg_handler == 0 || sync_msg_handler == 0)
+    {
+        cout << "BasicIPC: set_call_back(): can't set 0 as call back function pointer!" << endl;
+        return false;
+    }
+
      this->sync_msg_handler =  sync_msg_handler;
     this->async_msg_handler = async_msg_handler;
+
+    return true;
 }

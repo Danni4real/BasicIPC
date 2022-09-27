@@ -14,6 +14,9 @@
 
 #define SOCKET_FILE_PREFIX  "/tmp/BasicIPC_USR_"
 
+// if too many parallel sync messages, change PARALLEL_SYNC_MESSAGE_LIMIT to bigger value, then recompile BasicIPC!!!
+#define PARALLEL_SYNC_MESSAGE_LIMIT 128
+
 #define Debug
 
 using namespace std;
@@ -64,27 +67,45 @@ string get_field(string str, int index)
     return field;
 }
 
-BasicIPC::BasicIPC(int my_port)
+
+struct Ack
 {
-    this->my_port =  my_port;
+    unsigned int  ack_id;
+    std::string   ack_msg;
+    bool          occupied;
+    bool          msg_acked;
+};
 
-    ack_id  =  0;
+class BasicIPC::BasicIPC_Private
+{
+public:
+    unsigned int ack_id;
+    unsigned int my_port;
+    void*        msg_queue;
 
-    sync_msg_handler = 0;
-   async_msg_handler = 0;
+    mutex       ack_lock;
+    Ack         ack_list[PARALLEL_SYNC_MESSAGE_LIMIT];
 
-   msg_queue = new MessageBuf();
+    unsigned int   new_ack();
+    void           del_ack(int ack_id);
+    void           set_ack(int ack_id, const string& ack_msg);
+    bool           get_ack(int ack_id,       string* ack_msg);
 
-   for(int i=0; i< PARALLEL_SYNC_MESSAGE_LIMIT; i++)
-       ack_list[i].occupied  = false;
-}
+    bool  send(int dest_port, const string& msg);
 
-unsigned int BasicIPC::new_ack()
+    string      (*sync_msg_handler)(int src_port, const string& msg);
+    void       (*async_msg_handler)(int src_port, const string& msg);
+
+    static void* msg_receiver(void*  self);
+    static void* msg_processor(void* self);
+};
+
+unsigned int BasicIPC::BasicIPC_Private::new_ack()
 {
     unsigned int new_ack_id;
 
     ack_lock.lock();
-    new_ack_id = this->ack_id++;
+    new_ack_id = ack_id++;
     ack_lock.unlock();
 
     while(true)
@@ -112,7 +133,7 @@ end:
     return new_ack_id;
 }
 
-void BasicIPC::del_ack(int ack_id)
+void BasicIPC::BasicIPC_Private::del_ack(int ack_id)
 {
     ack_lock.lock();
 
@@ -128,7 +149,7 @@ void BasicIPC::del_ack(int ack_id)
     ack_lock.unlock();
 }
 
-void BasicIPC::set_ack(int ack_id, const string& ack_msg)
+void BasicIPC::BasicIPC_Private::set_ack(int ack_id, const string& ack_msg)
 {
     ack_lock.lock();
 
@@ -144,7 +165,7 @@ void BasicIPC::set_ack(int ack_id, const string& ack_msg)
 
     ack_lock.unlock();
 }
-bool BasicIPC::get_ack(int ack_id, std::string* ack_msg)
+bool BasicIPC::BasicIPC_Private::get_ack(int ack_id, std::string* ack_msg)
 {
     bool ret = false;
 
@@ -168,39 +189,10 @@ bool BasicIPC::get_ack(int ack_id, std::string* ack_msg)
     return ret;
 }
 
-
-bool BasicIPC::listen_my_port()
+void* BasicIPC::BasicIPC_Private::msg_processor(void* self)
 {
-    int       ret;
-    pthread_t tid;
-
-    if(sync_msg_handler == 0 || async_msg_handler == 0)
-    {
-        cout << "BasicIPC: call set_call_back() before call listen_my_port()!" << endl;
-        return false;
-    }
-
-    ret = pthread_create(&tid, NULL, msg_receiver, this);
-    if(ret != 0)
-    {
-        cout << "BasicIPC: msg_receiver thread create failed!" << endl;
-        return false;
-    }
-
-    ret = pthread_create(&tid, NULL, msg_processor, this);
-    if(ret != 0)
-    {
-        cout << "BasicIPC: msg_processor thread create failed!" << endl;
-        return false;
-    }
-
-    return true;
-}
-
-void* BasicIPC::msg_processor(void* basic_ipc)
-{
-    BasicIPC*    self = (BasicIPC*)basic_ipc;
-    MessageBuf* msg_q = (MessageBuf*)self->msg_queue;
+    BasicIPC_Private* p = (BasicIPC_Private*)self;
+    MessageBuf*   msg_q = (MessageBuf*)p->msg_queue;
 
     while(true)
     {
@@ -216,31 +208,31 @@ void* BasicIPC::msg_processor(void* basic_ipc)
 
         if(msg_head == SYNC_MESSAGE_HEAD)
         {
-            if(self->sync_msg_handler != 0)
+            if(p->sync_msg_handler != 0)
             {
                 string sync_id = get_field(msg,2);
 
-                string ack = self->sync_msg_handler(src_port, remove_head(remove_head(remove_head(msg))));
+                string ack = p->sync_msg_handler(src_port, remove_head(remove_head(remove_head(msg))));
 
-                self->send(src_port, add_head(ACK_MESSAGE_HEAD, add_head(sync_id, ack)));
+                p->send(src_port, add_head(ACK_MESSAGE_HEAD, add_head(sync_id, ack)));
             }
         }
         if(msg_head == ASYNC_MESSAGE_HEAD)
         {
-            if(self->async_msg_handler != 0)
-                self->async_msg_handler(src_port, remove_head(remove_head(msg)));
+            if(p->async_msg_handler != 0)
+                p->async_msg_handler(src_port, remove_head(remove_head(msg)));
         }
     }
 }
 
-void* BasicIPC::msg_receiver(void* basic_ipc)
+void* BasicIPC::BasicIPC_Private::msg_receiver(void* self)
 {
-    BasicIPC*    self = (BasicIPC*)basic_ipc;
-    MessageBuf* msg_q = (MessageBuf*)self->msg_queue;
+    BasicIPC_Private* p = (BasicIPC_Private*)self;
+    MessageBuf*   msg_q = (MessageBuf*)p->msg_queue;
 
     bool   ret;
     Socket sock;
-    ret =  sock.open_recv_sock(string(SOCKET_FILE_PREFIX) + to_string(self->my_port));
+    ret =  sock.open_recv_sock(string(SOCKET_FILE_PREFIX) + to_string(p->my_port));
     if(!ret)
     {
         cout << "BasicIPC: msg_receiver(): open_recv_sock() failed!" << endl;
@@ -263,7 +255,7 @@ void* BasicIPC::msg_receiver(void* basic_ipc)
             int    ack_id  = to_int(get_field(msg,1));
             string ack_msg = remove_head(remove_head(msg));
 
-            self->set_ack(ack_id, ack_msg);
+            p->set_ack(ack_id, ack_msg);
         }
         else
         {
@@ -275,7 +267,7 @@ void* BasicIPC::msg_receiver(void* basic_ipc)
     }
 }
 
-bool BasicIPC::send(int dest_port, const string& msg)
+bool BasicIPC::BasicIPC_Private::send(int dest_port, const string& msg)
 {
     bool   ret;
     Socket sock;
@@ -294,21 +286,66 @@ bool BasicIPC::send(int dest_port, const string& msg)
     return ret;
 }
 
+BasicIPC::BasicIPC(unsigned int my_port)
+{
+    p = new BasicIPC_Private();
+
+    p->my_port = my_port;
+
+    p->ack_id  =  0;
+
+    p->sync_msg_handler = 0;
+   p->async_msg_handler = 0;
+
+   p->msg_queue = new MessageBuf();
+
+   for(int i=0; i< PARALLEL_SYNC_MESSAGE_LIMIT; i++)
+       p->ack_list[i].occupied  = false;
+}
+
+bool BasicIPC::listen_my_port()
+{
+    int       ret;
+    pthread_t tid;
+
+    if(p->sync_msg_handler == 0 || p->async_msg_handler == 0)
+    {
+        cout << "BasicIPC: call set_call_back() before call listen_my_port()!" << endl;
+        return false;
+    }
+
+    ret = pthread_create(&tid, NULL, p->msg_receiver, p);
+    if(ret != 0)
+    {
+        cout << "BasicIPC: msg_receiver thread create failed!" << endl;
+        return false;
+    }
+
+    ret = pthread_create(&tid, NULL, p->msg_processor, p);
+    if(ret != 0)
+    {
+        cout << "BasicIPC: msg_processor thread create failed!" << endl;
+        return false;
+    }
+
+    return true;
+}
+
 bool BasicIPC::sync_send(int dest_port, const string& msg, string* ack_msg, int time_out_millisec)
 {
     bool          ret;
     unsigned int  ack_id;
 
-    ack_id = new_ack();
+    ack_id = p->new_ack();
 
-    string message = add_head(SYNC_MESSAGE_HEAD, add_head(my_port, add_head(ack_id, msg)));
+    string message = add_head(SYNC_MESSAGE_HEAD, add_head(p->my_port, add_head(ack_id, msg)));
 
-    ret = send(dest_port, message);
+    ret = p->send(dest_port, message);
     if(ret)
     {
         for(int i=0; i<time_out_millisec; i++)
         {
-            if(get_ack(ack_id, ack_msg) == true)
+            if(p->get_ack(ack_id, ack_msg) == true)
                 goto end;
 
             usleep(1000);
@@ -319,7 +356,7 @@ bool BasicIPC::sync_send(int dest_port, const string& msg, string* ack_msg, int 
     }
 
 end:
-    del_ack(ack_id);
+    p->del_ack(ack_id);
     return ret;
 }
 
@@ -327,9 +364,9 @@ bool BasicIPC::async_send(int dest_port, const string& msg)
 {
     bool ret;
 
-    string message = add_head(ASYNC_MESSAGE_HEAD, add_head(my_port, msg));
+    string message = add_head(ASYNC_MESSAGE_HEAD, add_head(p->my_port, msg));
 
-    ret = send(dest_port, message);
+    ret = p->send(dest_port, message);
 
     return ret;
 }
@@ -343,8 +380,8 @@ bool BasicIPC::set_call_back( void(*async_msg_handler)(int, const string&),
         return false;
     }
 
-     this->sync_msg_handler =  sync_msg_handler;
-    this->async_msg_handler = async_msg_handler;
+     p->sync_msg_handler =  sync_msg_handler;
+    p->async_msg_handler = async_msg_handler;
 
     return true;
 }

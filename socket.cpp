@@ -92,7 +92,7 @@ int Socket::recv()
     return recvd_len;
 }
 
-char* Socket::get_recv_buf()
+const char* Socket::get_recv_buf()
 {
     return recv_buf;
 }
